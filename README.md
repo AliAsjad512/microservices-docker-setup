@@ -100,4 +100,6 @@ Each service has:
 - Service discovery and networking
 - Health checks and dependencies
 - Container debugging and log analysis
+<img width="1614" height="883" alt="Nothern-ezgif com-optimize (2)" src="https://github.com/user-attachments/assets/a83a99e4-0464-48b5-914d-5f0baf701ded" />
+
 
