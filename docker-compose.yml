@@ -1,0 +1,247 @@
+services:
+  ordering-api:
+    build:
+      context: .
+      dockerfile: docker/ordering/Dockerfile
+    container_name: ordering-app
+    ports:
+      - "5224:5224"
+    environment:
+      - ConnectionStrings__OrderingDB=Host=orderingdb;Database=OrderingDB;Username=postgres;Password=yourWeak(!)Password
+      - ConnectionStrings__EventBus=amqp://guest:guest@rabbitmq
+      - Identity__Url=http://identity-app:5223
+      - Identity__Audience=orders
+    depends_on:
+      orderingdb:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      identity-api:
+        condition: service_started
+
+  orderingdb:
+    image: postgres:16-alpine
+    container_name: orderingdb
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: yourWeak(!)Password
+      POSTGRES_DB: OrderingDB
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  catalog-api:
+    build:
+      context: .
+      dockerfile: docker/catalog/Dockerfile
+    container_name: catalog-app
+    ports:
+      - "5222:5222"
+    environment:
+      - ConnectionStrings__CatalogDB=Host=catalogdb;Database=CatalogDB;Username=postgres;Password=yourWeak(!)Password
+      - ConnectionStrings__EventBus=amqp://guest:guest@rabbitmq
+    depends_on:
+      catalogdb:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  catalogdb:
+    image: pgvector/pgvector:pg16
+    container_name: catalogdb
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: yourWeak(!)Password
+      POSTGRES_DB: CatalogDB
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  basket-api:
+    build:
+      context: .
+      dockerfile: docker/basket/Dockerfile
+    container_name: basket-app
+    ports:
+      - "5221:5221"
+    environment:
+      - ConnectionStrings__Redis=redis
+      - ConnectionStrings__EventBus=amqp://guest:guest@rabbitmq
+      - Identity__Url=http://identity-app:5223
+      - Identity__Audience=basket
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      identity-api:
+        condition: service_started
+
+  identity-api:
+    build:
+      context: .
+      dockerfile: docker/identity/Dockerfile
+    container_name: identity-app
+    ports:
+      - "5223:5223"
+    environment:
+      - ConnectionStrings__IdentityDB=Host=identitydb;Database=IdentityDB;Username=postgres;Password=yourWeak(!)Password
+      - WebAppClient=http://13.58.87.236:5045
+      - WebhooksWebClient=http://13.58.87.236:5062
+      - BasketApiClient=http://13.58.87.236:5221
+      - OrderingApiClient=http://13.58.87.236:5224
+      - WebhooksApiClient=http://13.58.87.236:5227
+      - ASPNETCORE_ENVIRONMENT=Development
+    depends_on:
+      identitydb:
+        condition: service_healthy
+
+  identitydb:
+    image: postgres:16-alpine
+    container_name: identitydb
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: yourWeak(!)Password
+      POSTGRES_DB: IdentityDB
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  webhooks-api:
+    build:
+      context: .
+      dockerfile: docker/webhooks/Dockerfile
+    container_name: webhooks-app
+    ports:
+      - "5227:5227"
+    environment:
+      - ConnectionStrings__WebHooksDB=Host=webhooksdb;Database=WebHooksDB;Username=postgres;Password=yourWeak(!)Password
+      - ConnectionStrings__EventBus=amqp://guest:guest@rabbitmq
+      - Identity__Url=http://identity-app:5223
+      - Identity__Audience=webhooks
+    depends_on:
+      webhooksdb:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      identity-api:
+        condition: service_started
+
+  webhooksdb:
+    image: postgres:16-alpine
+    container_name: webhooksdb
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: yourWeak(!)Password
+      POSTGRES_DB: WebHooksDB
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  webhookclient:
+    build:
+      context: .
+      dockerfile: docker/webhookclient/Dockerfile
+    container_name: webhookclient-app
+    ports:
+      - "5062:5062"
+    environment:
+      - IdentityUrl=http://13.58.87.236:5223
+      - CallBackUrl=http://13.58.87.236:5062
+      - WebhooksApiUrl=http://webhooks-app:5227
+    depends_on:
+      identity-api:
+        condition: service_started
+      webhooks-api:
+        condition: service_started
+
+  orderprocessor:
+    build:
+      context: .
+      dockerfile: docker/orderprocessor/Dockerfile
+    container_name: orderprocessor-app
+    ports:
+      - "16888:16888"
+    environment:
+      - ConnectionStrings__orderingdb=Host=orderingdb;Database=OrderingDB;Username=postgres;Password=yourWeak(!)Password
+      - ConnectionStrings__EventBus=amqp://guest:guest@rabbitmq
+    depends_on:
+      orderingdb:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  paymentprocessor:
+    build:
+      context: .
+      dockerfile: docker/paymentprocessor/Dockerfile
+    container_name: paymentprocessor-app
+    ports:
+      - "5226:5226"
+    environment:
+      - ConnectionStrings__EventBus=amqp://guest:guest@rabbitmq
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  webapp:
+    build:
+      context: .
+      dockerfile: docker/webapp/Dockerfile
+    container_name: webapp-app
+    ports:
+      - "5045:5045"
+    environment:
+      - IdentityUrl=http://13.58.87.236:5223
+      - CallBackUrl=http://13.58.87.236:5045
+      - ConnectionStrings__EventBus=amqp://guest:guest@rabbitmq
+      - services__basket-api__http__0=http://basket-app:5221
+      - services__catalog-api__http__0=http://catalog-app:5222
+      - services__ordering-api__http__0=http://ordering-app:5224
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_FORWARDEDHEADERS_ENABLED=true
+    volumes:
+      - webapp-keys:/root/.aspnet/DataProtection-Keys
+    depends_on:
+      identity-api:
+        condition: service_started
+      basket-api:
+        condition: service_started
+      catalog-api:
+        condition: service_started
+      ordering-api:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  webapp-keys:

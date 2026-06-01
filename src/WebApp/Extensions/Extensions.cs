@@ -9,8 +9,8 @@ using Microsoft.Extensions.AI;
 using Microsoft.IdentityModel.JsonWebTokens;
 
 public static class Extensions
-{
-    public static void AddApplicationServices(this IHostApplicationBuilder builder)
+ { 
+   public static void AddApplicationServices(this IHostApplicationBuilder builder)
     {
         builder.AddAuthenticationServices();
 
@@ -18,6 +18,9 @@ public static class Extensions
                .AddEventBusSubscriptions();
 
         builder.Services.AddHttpForwarderWithServiceDiscovery();
+
+        // Add TokenProvider
+        builder.Services.AddScoped<eShop.ServiceDefaults.TokenProvider>();
 
         // Application services
         builder.Services.AddScoped<BasketState>();
@@ -39,7 +42,6 @@ public static class Extensions
             .AddApiVersion(1.0)
             .AddAuthToken();
     }
-
     public static void AddEventBusSubscriptions(this IEventBusBuilder eventBus)
     {
         eventBus.AddSubscription<OrderStatusChangedToAwaitingValidationIntegrationEvent, OrderStatusChangedToAwaitingValidationIntegrationEventHandler>();
@@ -70,21 +72,26 @@ public static class Extensions
         })
         .AddCookie(options => options.ExpireTimeSpan = TimeSpan.FromMinutes(sessionCookieLifetime))
         .AddOpenIdConnect(options =>
-        {
-            options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-            options.Authority = identityUrl;
-            options.SignedOutRedirectUri = callBackUrl;
-            options.ClientId = "webapp";
-            options.ClientSecret = "secret";
-            options.ResponseType = "code";
-            options.SaveTokens = true;
-            options.GetClaimsFromUserInfoEndpoint = true;
-            options.RequireHttpsMetadata = false;
-            options.Scope.Add("openid");
-            options.Scope.Add("profile");
-            options.Scope.Add("orders");
-            options.Scope.Add("basket");
-        });
+{
+    options.SignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+    options.Authority = identityUrl;
+    options.SignedOutRedirectUri = callBackUrl;
+    options.ClientId = "webapp";
+    options.ClientSecret = "secret";
+    options.ResponseType = "code";
+    options.SaveTokens = true;
+    options.GetClaimsFromUserInfoEndpoint = true;
+    options.RequireHttpsMetadata = false;
+    options.Scope.Add("openid");
+    options.Scope.Add("profile");
+    options.Scope.Add("orders");
+    options.Scope.Add("basket");
+    // Add these lines
+    options.CorrelationCookie.SameSite = SameSiteMode.Lax;
+    options.CorrelationCookie.SecurePolicy = CookieSecurePolicy.None;
+    options.NonceCookie.SameSite = SameSiteMode.Lax;
+    options.NonceCookie.SecurePolicy = CookieSecurePolicy.None;
+});
 
         // Blazor auth services
         services.AddScoped<AuthenticationStateProvider, ServerAuthenticationStateProvider>();
